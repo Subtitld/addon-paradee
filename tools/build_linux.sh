@@ -62,7 +62,10 @@ docker run --rm \
             '$QUADMATH_SRC' '$QUADMATH_SRC.sha256' '$SOURCE' '$SOURCE.sha256'
 
         PYTHON=python tools/build_espeak.sh build/espeak-ng
-        pyinstaller pyinstaller.spec --noconfirm --log-level WARN --workpath build/pyinstaller
+        # Stripping (pyinstaller.spec) caches the stripped copies in PyInstaller's
+        # config folder; /tmp/.cache belongs to root here, made by the pip mount.
+        PYINSTALLER_CONFIG_DIR=/tmp/pyinstaller-config \\
+            pyinstaller pyinstaller.spec --noconfirm --log-level WARN --workpath build/pyinstaller
         dist/paradee-addon/paradee-addon --self-test
 
         # Every LGPL library in the bundle must be a build whose source is attached.
