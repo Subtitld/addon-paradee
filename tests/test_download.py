@@ -58,7 +58,7 @@ def server(monkeypatch, tmp_path):
 
 
 def _pin(sha256: str | None = None) -> dict:
-    return {'path': 'onnx/decode.onnx', 'model': 'micro', 'repo': 'owensong/Inflect-Micro-v2-ONNX', 'revision': 'a' * 40,
+    return {'path': 'onnx/paradee_int8.onnx', 'model': 'paradee-1.2', 'repo': 'sahilmahendrakar/Paradee-8M-v1.2', 'revision': 'a' * 40,
             'size': len(PAYLOAD), 'sha256': sha256 or hashlib.sha256(PAYLOAD).hexdigest()}
 
 
@@ -67,11 +67,11 @@ def test_downloads_checks_and_stamps(server, tmp_path):
     seen = []
     download.ensure([pin], lambda done, total: seen.append((done, total)), lambda: False)
     path = download.local_path(pin)
-    assert path == tmp_path / 'inflect' / 'micro' / ('a' * 40) / 'onnx' / 'decode.onnx'
+    assert path == tmp_path / 'paradee' / 'paradee-1.2' / ('a' * 40) / 'onnx' / 'paradee_int8.onnx'
     assert path.read_bytes() == PAYLOAD
     assert download.is_present(pin)
     assert seen[-1] == (len(PAYLOAD), len(PAYLOAD))
-    assert _Handler.paths == ['/owensong/Inflect-Micro-v2-ONNX/resolve/' + 'a' * 40 + '/onnx/decode.onnx']
+    assert _Handler.paths == ['/sahilmahendrakar/Paradee-8M-v1.2/resolve/' + 'a' * 40 + '/onnx/paradee_int8.onnx']
     # Present now: nothing is fetched again.
     download.ensure([pin], lambda *_: None, lambda: False)
     assert _Handler.requests == ['']
@@ -79,7 +79,7 @@ def test_downloads_checks_and_stamps(server, tmp_path):
 
 def test_resumes_from_the_part_file(server):
     pin = _pin()
-    part = download.local_path(pin).with_name('decode.onnx.part')
+    part = download.local_path(pin).with_name('paradee_int8.onnx.part')
     part.parent.mkdir(parents=True)
     part.write_bytes(PAYLOAD[:1000])
     download.ensure([pin], lambda *_: None, lambda: False)

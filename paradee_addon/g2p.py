@@ -102,10 +102,18 @@ class G2P(en.G2P):
         self.unk = ''
 
 
+# The components misaki enables (trf=False). The pipeline's others (parser,
+# senter, attribute_ruler, lemmatizer, ner) are left out rather than loaded
+# and disabled: nothing reads them, and the tokens and tags come out the same
+# (tests/test_g2p.py).
+SPACY_COMPONENTS = ('tok2vec', 'tagger')
+_SPACY_OTHERS = ('parser', 'senter', 'attribute_ruler', 'lemmatizer', 'ner')
+
+
 def load_spacy():
-    """spaCy's small English pipeline with the components misaki enables (trf=False)."""
+    """spaCy's small English pipeline, with only the components misaki runs."""
     import en_core_web_sm
-    return en_core_web_sm.load(enable=['tok2vec', 'tagger'])
+    return en_core_web_sm.load(exclude=list(_SPACY_OTHERS))
 
 
 class Phonemizer:

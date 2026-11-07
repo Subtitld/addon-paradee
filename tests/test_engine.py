@@ -1,12 +1,13 @@
-"""Real synthesis with both pinned models, from source, against upstream.
+"""Real synthesis with the pinned model, from source, against upstream.
 
 Copyright (C) 2026 Subtitld contributors
 SPDX-License-Identifier: GPL-3.0-or-later
 
-The models (38 and 16 MB) download into $SUBTITLD_MODELS_DIR, or
+The model (8.5 MB) downloads into $SUBTITLD_MODELS_DIR, or
 ~/.cache/subtitld/models, on the first run, checked against pins.json.
-tests/fixtures/parity-<model>.wav is upstream's own ONNX wrapper speaking the
-same text with the same seed (tools/make_fixtures.py).
+tests/fixtures/parity-<voice>.wav is upstream's own `Paradee` speaking the
+same text at the same speed, as the first line of a new session seeded as
+the add-on seeds it (tools/make_fixtures.py): the model mixes in random noise.
 """
 
 from __future__ import annotations
@@ -18,7 +19,7 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from paradee_addon import __main__ as addon, download, engine
+from paradee_addon import __main__ as addon, download, engine, g2p, voices
 
 pytestmark = pytest.mark.model
 
@@ -26,65 +27,86 @@ FIXTURES = Path(__file__).resolve().parent / 'fixtures'
 PARITY = json.loads((FIXTURES / 'parity.json').read_text(encoding='utf-8'))
 
 
-@pytest.fixture(scope='module', params=['micro', 'nano'])
-def model(request, espeak_engine):
-    download.ensure(addon.pins(request.param), lambda *_: None, lambda: False)
-    return request.param, engine.Inflect(addon.model_dir(request.param), espeak_engine, threads=2)
+@pytest.fixture(scope='module')
+def phonemizer(espeak_engine):
+    return g2p.Phonemizer(espeak_engine)
+
+
+@pytest.fixture(scope='module')
+def paradee(phonemizer):
+    download.ensure(addon.pins(), lambda *_: None, lambda: False)
+    return engine.Paradee(addon.model_dir(), phonemizer, threads=1)
 
 
 def _read(path: Path) -> np.ndarray:
     with wave.open(str(path)) as clip:
         assert clip.getframerate() == engine.SAMPLE_RATE
-        return np.frombuffer(clip.readframes(clip.getnframes()), dtype='<i2').astype(np.float32) / 32768.0
+        return np.frombuffer(clip.readframes(clip.getnframes()), dtype='<i2').astype(np.float32) / 32767.0
 
 
-def test_matches_upstream_sample_for_sample(model):
-    name, inflect = model
-    assert inflect.phonemes(PARITY['text']) == PARITY['phonemes']
-    wav = inflect.synthesize(PARITY['text'], seed=PARITY['seed'], speed=PARITY['speed'],
-                             variation=PARITY['variation'])
-    reference = _read(FIXTURES / f'parity-{name}.wav')
-    assert len(wav) == len(reference) == PARITY['models'][name]['samples']
-    # The fixture is 16-bit: a few steps of 1/32768 between ONNX Runtime builds.
-    assert np.abs(wav - reference).max() < 5e-4
-    assert np.corrcoef(wav, reference)[0, 1] > 0.9999
+def test_the_model_has_the_add_on_s_voices(paradee):
+    assert sorted(paradee.voices) == sorted(v.kokoro for v in voices.VOICES)
 
 
-def test_sounds_like_speech(model):
-    _name, inflect = model
-    wav = inflect.synthesize('Good morning. Shall we begin the recording?', seed=1)
+@pytest.mark.parametrize('voice', voices.VOICES, ids=lambda v: v.id)
+def test_matches_upstream_sample_for_sample(paradee, phonemizer, voice):
+    accent = 'gb' if voice.british else 'us'
+    assert paradee.pieces(PARITY['text'], voice.british) == [
+        piece for sentence in engine.sentences(PARITY['text'])
+        for piece in engine.fit(paradee.phonemizer(sentence, voice.british))]
+    assert ' '.join(paradee.pieces(PARITY['text'], voice.british)) == PARITY['phonemes'][accent]
+    fresh = engine.Paradee(addon.model_dir(), phonemizer, threads=1)
+    wav = fresh.synthesize(PARITY['text'], voice=voice.kokoro, british=voice.british, speed=PARITY['speed'])
+    reference = _read(FIXTURES / f'parity-{voice.kokoro}.wav')
+    assert len(wav) == len(reference) == PARITY['samples'][voice.kokoro]
+    # The fixture is 16-bit: the add-on's float output rounds to it.
+    assert np.abs(wav - reference).max() < 2 / 32767
+
+
+def test_sounds_like_speech(paradee):
+    wav = paradee.synthesize('Good morning. Shall we begin the recording?', voice='am_puck', british=False)
     assert wav.dtype == np.float32 and np.abs(wav).max() <= 1.0
     seconds = len(wav) / engine.SAMPLE_RATE
     assert 1.5 < seconds < 5.0
     rms = float(np.sqrt(np.mean(wav ** 2)))
     assert 0.02 < rms < 0.5
-    # The sentence pause is silence.
-    assert np.sum(np.abs(wav) < 1e-4) > 0.15 * engine.SAMPLE_RATE
 
 
-def test_seeds_repeat_and_vary(model):
-    _name, inflect = model
+def test_a_line_said_twice_differs_only_in_its_noise(paradee):
     line = 'The same line, said twice.'
-    a = inflect.synthesize(line, seed=3)
-    assert np.array_equal(a, inflect.synthesize(line, seed=3))
-    b = inflect.synthesize(line, seed=4)
+    a = paradee.synthesize(line, voice='af_heart', british=False)
+    b = paradee.synthesize(line, voice='af_heart', british=False)
     assert len(a) == len(b) and not np.array_equal(a, b)
-    # No variation: the noise is scaled away, so the seed no longer matters.
-    assert np.allclose(inflect.synthesize(line, seed=3, variation=0.0),
-                       inflect.synthesize(line, seed=9, variation=0.0), atol=1e-5)
+    # The voiced sound, which carries the words, is the same: the two takes
+    # are nearly identical overall.
+    assert np.corrcoef(a, b)[0, 1] > 0.9
 
 
-def test_speed_changes_the_pace(model):
-    _name, inflect = model
+def test_speed_changes_the_pace(paradee):
     line = 'Speaking faster makes the line shorter.'
-    normal = len(inflect.synthesize(line, seed=2))
-    fast = len(inflect.synthesize(line, seed=2, speed=2.0))
-    slow = len(inflect.synthesize(line, seed=2, speed=0.5))
+    normal = len(paradee.synthesize(line, voice='bf_isabella', british=True))
+    fast = len(paradee.synthesize(line, voice='bf_isabella', british=True, speed=2.0))
+    slow = len(paradee.synthesize(line, voice='bf_isabella', british=True, speed=0.5))
     assert fast < 0.65 * normal and slow > 1.6 * normal
 
 
-def test_cancel_between_sentences(model):
-    _name, inflect = model
+def test_a_sentence_too_long_for_the_model_is_cut_between_words(paradee):
+    long = max(json.loads((FIXTURES / 'phonemes.json').read_text(encoding='utf-8')), key=len)
+    pieces = paradee.pieces(long, british=False)
+    assert len(pieces) > 1 and all(len(p) <= engine.MAX_PHONEMES for p in pieces)
+    assert ' '.join(pieces) == paradee.phonemizer(long, False)
+    wav = paradee.synthesize(long, voice='af_heart', british=False)
+    assert len(wav) / engine.SAMPLE_RATE > 20
+
+
+def test_unknown_voice_and_empty_text_are_refused(paradee):
+    with pytest.raises(ValueError):
+        paradee.synthesize('Hello.', voice='af_bella', british=False)
+    with pytest.raises(ValueError):
+        paradee.synthesize('   ', voice='af_heart', british=False)
+
+
+def test_cancel_between_sentences(paradee):
     calls = []
 
     def cancelled():
@@ -92,4 +114,5 @@ def test_cancel_between_sentences(model):
         return len(calls) > 1
 
     with pytest.raises(engine.Cancelled):
-        inflect.synthesize('First sentence. Second sentence. Third.', cancelled=cancelled)
+        paradee.synthesize('First sentence. Second sentence. Third.', voice='af_heart', british=False,
+                           cancelled=cancelled)

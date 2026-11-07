@@ -1,0 +1,22 @@
+{
+ "text": "Good evening. It's 7:30, and Dr. Okafor's flight lands at Gate 12!",
+ "speed": 1.1,
+ "samples": {
+  "af_heart": 147000,
+  "bf_isabella": 169800,
+  "am_puck": 136800,
+  "bm_fable": 175800
+ },
+ "phonemes": {
+  "us": "ɡˈʊd ˈivnɪŋ. ˌɪts sˈɛvən:θˈɜɹTi, ænd dˈɑktəɹ ˈɑkæfəɹz flˈIt lˈændz æt ɡˈAt twˈɛlv!",
+  "gb": "ɡˈʊd ˈiːvnɪŋ. ˌɪts sˈɛvən:θˈɜːti, and dˈɒktə ˈɒkafəz flˈIt lˈandz at ɡˈAt twˈɛlv!"
+ },
+ "made_with": {
+  "paradee": "1.2.1",
+  "misaki": "0.9.4",
+  "spacy": "3.8.18",
+  "en_core_web_sm": "3.8.0",
+  "onnxruntime": "1.31.0",
+  "phonemizer-fork": "3.3.2"
+ }
+}

@@ -14,8 +14,15 @@ Apache-2.0). The model is one ONNX graph from Kokoro's phoneme ids to audio:
 The text is read one sentence at a time, as upstream does: it is cut after
 . ! ? and at line breaks, each sentence is phonemized (g2p.py), a sentence
 whose phonemes do not fit is cut at its last space that does, and the pieces'
-audio is joined end to end. The same text, voice and speed give the same
-audio as upstream's `Paradee(...)(text, speed, voice)`.
+audio is joined end to end.
+
+The graph mixes random noise into the sound (RandomNormalLike, the breath and
+hiss of the voice). ONNX Runtime draws it from a generator each session seeds
+from the process-wide seed, which is random unless set. The add-on sets it
+(SEED) before it makes the session, so a run of lines sounds the same in every
+process, and the first line is sample for sample what upstream's
+`Paradee(...)(text, speed, voice)` says after `onnxruntime.set_seed(SEED)`.
+A line said twice in one session differs only in that noise.
 """
 
 from __future__ import annotations
@@ -35,6 +42,7 @@ SPEED_RANGE = (0.5, 2.0)
 MAX_PHONEMES = 510   # 512 positions, two of them the pads
 MODEL_FILE = 'onnx/paradee_int8.onnx'
 CONFIG_FILE = 'config.json'
+SEED = 0
 
 _SENTENCE_RE = re.compile(r'(?<=[.!?…])\s+|\n+')
 
@@ -75,6 +83,7 @@ class Paradee:
         options.intra_op_num_threads = threads or default_threads()
         options.inter_op_num_threads = 1
         options.log_severity_level = 3
+        ort.set_seed(SEED)
         self.session = ort.InferenceSession(str(model_dir / MODEL_FILE), options,
                                             providers=['CPUExecutionProvider'])
         self.phonemizer = phonemizer

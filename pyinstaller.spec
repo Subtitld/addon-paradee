@@ -1,13 +1,15 @@
 # -*- mode: python ; coding: utf-8 -*-
-"""PyInstaller spec for the Subtitld Inflect add-on.
+"""PyInstaller spec for the Subtitld Paradee add-on.
 
 Copyright (C) 2026 Subtitld contributors
 SPDX-License-Identifier: GPL-3.0-or-later
 
 Produces `dist/paradee-addon/` (launcher + `_internal/`): ONNX Runtime, numpy,
-num2words, the add-on, and espeak-ng with its English data. The models are not
-in it; each downloads the first time its voice speaks. The release step copies
-the folder to `bin/` inside the archive, next to manifest.json.
+spaCy with its small English pipeline (en_core_web_sm), misaki with its two
+English dictionaries, num2words, the add-on, and espeak-ng with its English
+data. The Paradee model is not in it; it downloads the first time a line is
+spoken. The release step copies the folder to `bin/` inside the archive, next
+to manifest.json.
 
 espeak-ng must be staged first, into paradee_addon/espeak/:
 
@@ -29,9 +31,12 @@ import subprocess
 import sys
 from pathlib import Path
 
+from PyInstaller.utils.hooks import collect_data_files
+
 SPEC_ROOT = Path(SPECPATH).resolve()
 PACKAGE = SPEC_ROOT / 'paradee_addon'
 ESPEAK = PACKAGE / 'espeak'
+STRIP = sys.platform.startswith('linux')
 ESPEAK_LIBRARY = {'win32': 'espeak-ng.dll', 'darwin': 'libespeak-ng.dylib'}.get(sys.platform, 'libespeak-ng.so.1')
 
 # Fail the build, loudly, if the pins or espeak-ng are missing. Otherwise the
@@ -47,6 +52,11 @@ datas = [
     (str(ESPEAK / 'espeak-ng-data'), 'paradee_addon/espeak/espeak-ng-data'),
     (str(ESPEAK / 'SOURCE.txt'), 'paradee_addon/espeak'),
 ]
+# spaCy's English pipeline: its config, vocabulary and weights.
+datas += collect_data_files('en_core_web_sm')
+# misaki's American and British dictionaries only: its Japanese and Vietnamese
+# data is for languages the add-on never speaks.
+datas += collect_data_files('misaki', includes=['data/us_*.json', 'data/gb_*.json', 'data/__init__.py'])
 # A binary, so PyInstaller bundles what it links (the C++ runtime).
 binaries = [(str(ESPEAK / ESPEAK_LIBRARY), 'paradee_addon/espeak')]
 
@@ -102,7 +112,8 @@ a = Analysis(
     binaries=binaries,
     datas=datas,
     # Imported inside functions, so the handshake does not wait for numpy.
-    hiddenimports=['paradee_addon.engine', 'paradee_addon.espeak', 'paradee_addon.text'],
+    hiddenimports=['paradee_addon.engine', 'paradee_addon.espeak', 'paradee_addon.g2p',
+                   'misaki.en', 'misaki.data', 'en_core_web_sm'],
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],
@@ -113,9 +124,15 @@ a = Analysis(
         'onnxruntime.quantization', 'onnx', 'sympy', 'coloredlogs', 'humanfriendly',
         'torch', 'scipy', 'matplotlib', 'pandas', 'IPython',
         # espeak-ng is staged into paradee_addon/espeak/ instead; phonemizer
-        # is not used at all (paradee_addon/espeak.py does its work), and
-        # docopt is num2words' command line only.
+        # is not used at all (paradee_addon/g2p.py and espeak.py do its
+        # work), and docopt is num2words' command line only.
         'espeakng_loader', 'phonemizer', 'docopt',
+        # misaki's other languages, and what only they import.
+        'misaki.ja', 'misaki.zh', 'misaki.zh_frontend', 'misaki.zh_normalization', 'misaki.ko',
+        'misaki.g2pkc', 'misaki.vi', 'misaki.vi_cleaner', 'misaki.he', 'misaki.cutlet', 'misaki.num2kana',
+        'misaki.tone_sandhi', 'misaki.transcription', 'misaki.espeak',
+        'fugashi', 'unidic', 'unidic_lite', 'jieba', 'pypinyin', 'cn2an', 'jamo', 'mecab', 'sudachipy',
+        'spacy_curated_transformers', 'spacy_transformers', 'cupy', 'tensorflow', 'mxnet', 'jax',
         'PySide6', 'PyQt6', 'PyQt5', 'tkinter', 'Tkinter', '_tkinter',
         'pytest', '_pytest', 'pluggy', 'iniconfig', 'setuptools', 'pkg_resources',
         'unittest', 'pydoc_data',
@@ -145,9 +162,10 @@ exe = EXE(
     name='paradee-addon',
     debug=False,
     bootloader_ignore_signals=False,
-    # strip=False: stripping the native libraries saves little and breaks
-    # macOS code signatures.
-    strip=False,
+    # Linux: strip, because spaCy's and blis's wheels carry their debug
+    # symbols (spaCy's compiled modules shrink about ninefold). Elsewhere
+    # stripping saves little and breaks macOS code signatures.
+    strip=STRIP,
     upx=False,
     console=True,  # stdio is the protocol channel
     disable_windowed_traceback=False,
@@ -162,7 +180,7 @@ coll = COLLECT(
     a.binaries,
     a.zipfiles,
     a.datas,
-    strip=False,
+    strip=STRIP,
     upx=False,
     upx_exclude=[],
     name='paradee-addon',

@@ -65,22 +65,22 @@ def _synth(proc, req_id: str, tmp_path: Path, **params) -> dict:
 
 def test_hello_lists_languages_and_voices(proc):
     hello = _recv(proc)
-    assert hello['type'] == 'hello' and hello['addon'] == 'inflect' and hello['protocol'] == 1
+    assert hello['type'] == 'hello' and hello['addon'] == 'paradee' and hello['protocol'] == 1
     [capability] = hello['capabilities']
     assert capability['task'] == 'tts.synthesize'
-    assert capability['languages'] == ['en-us']
+    assert capability['languages'] == ['en-us', 'en-gb']
     assert capability['voices'] == voices.manifest_voices()
-    assert [v['id'] for v in capability['voices']] == ['inflect-micro', 'inflect-nano']
+    assert [v['id'] for v in capability['voices']] == ['heart', 'puck', 'isabella', 'fable']
     assert capability['voice_clone'] is False
 
 
 def test_requests_it_cannot_serve_get_clear_errors(proc, tmp_path):
     _recv(proc)
     _send(proc, {'type': 'ready', 'host': 'subtitld', 'host_version': 'test'})
-    spanish = _synth(proc, 'a', tmp_path, text='Hola.', voice='inflect-micro', language='es')
+    spanish = _synth(proc, 'a', tmp_path, text='Hola.', voice='heart', language='es')
     assert spanish['code'] == 'unsupported_language' and 'English' in spanish['message']
     assert _synth(proc, 'c', tmp_path, text='Hello.', voice='alba', language='en')['code'] == 'unsupported_voice'
-    assert _synth(proc, 'd', tmp_path, text='  ', voice='inflect-nano', language='en')['code'] == 'bad_params'
+    assert _synth(proc, 'd', tmp_path, text='  ', voice='fable', language='en')['code'] == 'bad_params'
     _send(proc, {'id': 'e', 'type': 'tts.synthesize', 'params': {'text': 'Hi.', 'language': 'en'}})
     assert _terminal(proc, 'e')['code'] == 'bad_params'  # no output_path
     _send(proc, {'id': 'f', 'type': 'asr.transcribe', 'params': {}})
@@ -91,7 +91,7 @@ def test_requests_it_cannot_serve_get_clear_errors(proc, tmp_path):
 def test_any_english_and_no_language_are_accepted(proc, tmp_path, language):
     """They get past the checks to the download, which fails here: no network."""
     _recv(proc)
-    frame = _synth(proc, 'g', tmp_path, text='Hello.', voice='inflect-nano', language=language)
+    frame = _synth(proc, 'g', tmp_path, text='Hello.', voice='isabella', language=language)
     assert frame['code'] == 'network_unavailable' and frame['retryable'] is True
 
 
@@ -103,14 +103,16 @@ def test_shutdown_exits_cleanly(proc):
 
 def test_options_request_then_environment_then_default(monkeypatch):
     monkeypatch.delenv('PARADEE_SPEED', raising=False)
-    monkeypatch.setenv('PARADEE_VARIATION', '0.3')
     monkeypatch.setenv('PARADEE_THREADS', 'many')
-    options = addon._options({'speed': '1.5'})
-    assert options == {'threads': 0, 'speed': 1.5, 'variation': 0.3}
-    assert addon._options({'speed': 9, 'variation': -1}) == {'threads': 0, 'speed': 2.0, 'variation': 0.0}
+    assert addon._options({'speed': '1.5'}) == {'threads': 0, 'speed': 1.5}
+    assert addon._options({'speed': 9}) == {'threads': 0, 'speed': 2.0}
+    monkeypatch.setenv('PARADEE_SPEED', '0.8')
+    monkeypatch.setenv('PARADEE_THREADS', '3')
+    assert addon._options({}) == {'threads': 3, 'speed': 0.8}
 
 
-def test_voices_by_id_or_model():
+def test_voices_by_id_or_kokoro_name():
     assert voices.by_id('') is voices.DEFAULT
-    assert voices.by_id('nano').id == 'inflect-nano'
-    assert voices.by_id('kokoro') is None
+    assert voices.by_id('bm_fable').id == 'fable' and voices.by_id('fable').british
+    assert not voices.by_id('puck').british
+    assert voices.by_id('af_bella') is None

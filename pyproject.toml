@@ -16,14 +16,14 @@ requires-python = ">=3.10"
 # (called through ctypes, see paradee_addon/espeak.py) says the words misaki
 # does not know. The Linux build compiles espeak-ng itself
 # (tools/build_espeak.sh); elsewhere it comes from the espeakng-loader wheel.
-# en_core_web_sm is not on PyPI: constraints.txt installs it from spaCy's
-# release.
+# en_core_web_sm is not on PyPI: it comes from spaCy's own release, pinned by
+# its sha256 (pip refuses links in constraints.txt, so the pin is here).
 dependencies = [
     "onnxruntime==1.31.0",
     "numpy>=1.26,<3",  # constraints.txt pins the release build
     "misaki==0.9.4",
     "spacy>=3.8,<3.9",
-    "en_core_web_sm==3.8.0",
+    "en_core_web_sm @ https://github.com/explosion/spacy-models/releases/download/en_core_web_sm-3.8.0/en_core_web_sm-3.8.0-py3-none-any.whl#sha256=1932429db727d4bff3deed6b34cfc05df17794f4a52eeb26cf8928f7c1a0fb85",
     "num2words==0.5.14",
     "espeakng-loader==0.2.4",
 ]

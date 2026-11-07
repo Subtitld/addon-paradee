@@ -4,8 +4,8 @@ Copyright (C) 2026 Subtitld contributors
 SPDX-License-Identifier: GPL-3.0-or-later
 
 $PARADEE_TEST_BINARY names the binary; without it these tests skip (and the
-release workflow refuses skipped tests). The binary downloads both models
-(54 MB) into $SUBTITLD_MODELS_DIR, with nothing but what is in its own bundle,
+release workflow refuses skipped tests). The binary downloads the model
+(8.5 MB) into $SUBTITLD_MODELS_DIR, with nothing but what is in its own bundle,
 then speaks with each voice and cancels a line.
 
     PARADEE_TEST_BINARY=dist/paradee-addon/paradee-addon pytest tests/test_installed.py
@@ -84,16 +84,16 @@ def test_speaks_with_each_voice_then_cancels(tmp_path):
     addon = Addon(tmp_path, timeout=900)
     try:
         hello = addon.read()
-        assert hello['type'] == 'hello' and hello['addon'] == 'inflect'
+        assert hello['type'] == 'hello' and hello['addon'] == 'paradee'
         voice_ids = [v['id'] for v in hello['capabilities'][0]['voices']]
-        assert voice_ids == ['inflect-micro', 'inflect-nano']
+        assert voice_ids == ['heart', 'puck', 'isabella', 'fable']
         addon.send({'type': 'ready', 'host': 'test'})
 
         for index, voice in enumerate(voice_ids):
             out = tmp_path / f'{voice}.wav'
             addon.send({'id': voice, 'type': 'tts.synthesize', 'params': {
                 'text': 'Good morning. The meeting starts at 9:30 AM, in room 204.', 'voice': voice,
-                'language': 'en-US', 'seed': 5, 'output_path': str(out)}})
+                'language': 'en-US', 'output_path': str(out)}})
             result = addon.until_terminal(voice)
             assert result['type'] == 'result', result
             assert result['data']['sample_rate'] == 24000 and result['data']['duration_sec'] > 2
@@ -109,7 +109,7 @@ def test_speaks_with_each_voice_then_cancels(tmp_path):
 
         addon.send({'id': 'c', 'type': 'tts.synthesize', 'params': {
             'text': 'This line is long enough to be interrupted before it ends. ' * 12,
-            'voice': 'inflect-micro', 'language': 'en', 'output_path': str(tmp_path / 'c.wav')}})
+            'voice': 'fable', 'language': 'en', 'output_path': str(tmp_path / 'c.wav')}})
         error = addon.until_terminal('c', on_progress)
         assert cancelled and error['type'] == 'error' and error['code'] == 'cancelled'
         assert not (tmp_path / 'c.wav').exists()
