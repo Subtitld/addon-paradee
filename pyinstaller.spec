@@ -36,7 +36,6 @@ from PyInstaller.utils.hooks import collect_data_files
 SPEC_ROOT = Path(SPECPATH).resolve()
 PACKAGE = SPEC_ROOT / 'paradee_addon'
 ESPEAK = PACKAGE / 'espeak'
-STRIP = sys.platform.startswith('linux')
 ESPEAK_LIBRARY = {'win32': 'espeak-ng.dll', 'darwin': 'libespeak-ng.dylib'}.get(sys.platform, 'libespeak-ng.so.1')
 
 # Fail the build, loudly, if the pins or espeak-ng are missing. Otherwise the
@@ -106,6 +105,37 @@ def _fix_libexpat(entries):
     return out
 
 
+# ---------------------------------------------------------------------------
+# spaCy's stack ships its debug information: about 60 MB of it in spaCy's,
+# thinc's and blis's compiled modules on Linux (spaCy's shrink about
+# ninefold). Remove it from those modules only, and only the debug sections
+# (strip --strip-debug): PyInstaller's own strip, on every library, corrupts
+# numpy's OpenBLAS with AlmaLinux 8's binutils, and on macOS would break code
+# signatures.
+# ---------------------------------------------------------------------------
+_DEBUG_HEAVY = ('spacy/', 'thinc/', 'blis/', 'srsly/', 'cymem/', 'preshed/', 'murmurhash/')
+
+
+def _strip_debug_info(entries):
+    if not sys.platform.startswith('linux'):
+        return entries
+    out_dir = Path(workpath) / 'stripped'
+    out = []
+    saved = 0
+    for entry in entries:
+        name, src = entry[0], entry[1]
+        if not name.replace(os.sep, '/').startswith(_DEBUG_HEAVY):
+            out.append(entry)
+            continue
+        dest = out_dir / name
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        subprocess.run(['strip', '--strip-debug', '-o', str(dest), src], check=True)
+        saved += os.path.getsize(src) - dest.stat().st_size
+        out.append((name, str(dest)) + tuple(entry[2:]))
+    print(f'stripped debug information from spaCy\'s stack: {saved / 1e6:.0f} MB')
+    return out
+
+
 a = Analysis(
     [str(PACKAGE / '__main__.py')],
     pathex=[str(SPEC_ROOT)],
@@ -150,6 +180,7 @@ a = Analysis(
 )
 
 a.binaries = _fix_libexpat(a.binaries)
+a.binaries = _strip_debug_info(a.binaries)
 a.binaries = [entry for entry in a.binaries if not os.path.basename(entry[0]).startswith('libmvec.so')]
 
 pyz = PYZ(a.pure, a.zipped_data)
@@ -162,10 +193,8 @@ exe = EXE(
     name='paradee-addon',
     debug=False,
     bootloader_ignore_signals=False,
-    # Linux: strip, because spaCy's and blis's wheels carry their debug
-    # symbols (spaCy's compiled modules shrink about ninefold). Elsewhere
-    # stripping saves little and breaks macOS code signatures.
-    strip=STRIP,
+    # strip=False: see _strip_debug_info, which strips only spaCy's stack.
+    strip=False,
     upx=False,
     console=True,  # stdio is the protocol channel
     disable_windowed_traceback=False,
@@ -180,7 +209,7 @@ coll = COLLECT(
     a.binaries,
     a.zipfiles,
     a.datas,
-    strip=STRIP,
+    strip=False,
     upx=False,
     upx_exclude=[],
     name='paradee-addon',
