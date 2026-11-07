@@ -13,8 +13,9 @@ unable to get local issuer certificate".
 So the frozen build points SSL_CERT_FILE at the CA bundle this machine's
 system keeps: the system store, with any certificate an administrator added.
 An SSL_CERT_FILE or SSL_CERT_DIR already set always wins (a proxy that
-inspects HTTPS needs its own). Windows is left alone: there Python reads the
-system's certificate store.
+inspects HTTPS needs its own). A system with no CA bundle at all (a bare
+container) gets certifi's, which the bundle carries because spaCy imports it.
+Windows is left alone: there Python reads the system's certificate store.
 """
 
 from __future__ import annotations
@@ -45,4 +46,12 @@ def configure_ca_bundle(frozen: bool | None = None, platform: str | None = None)
         if os.path.isfile(path):
             os.environ['SSL_CERT_FILE'] = path
             return path
-    return None
+    try:
+        import certifi
+    except ImportError:
+        return None
+    path = certifi.where()
+    if not os.path.isfile(path):
+        return None
+    os.environ['SSL_CERT_FILE'] = path
+    return path
