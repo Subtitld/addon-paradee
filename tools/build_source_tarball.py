@@ -5,7 +5,8 @@ Copyright (C) 2026 Subtitld contributors
 SPDX-License-Identifier: GPL-3.0-or-later
 
 The add-on is GPL-3.0-or-later and its archives carry object code of
-espeak-ng (GPL-3.0-or-later) and num2words (LGPL-2.1, as bytecode). They are
+espeak-ng (GPL-3.0-or-later), num2words (LGPL-2.1, as bytecode), and certifi
+and tqdm (MPL-2.0, as bytecode, which spaCy imports). They are
 downloads, not a physical product, so section 6(d) applies: the Corresponding
 Source is offered from the same place, the GitHub release, at no charge.
 (Adapted from addon-sanotts' tool of the same name.)
@@ -15,6 +16,8 @@ The tarball holds, at the exact revisions frozen into the binaries:
     espeak-ng-1.52.0.tar.gz        espeak-ng at ESPEAK_NG_COMMIT
     espeakng-loader-0.2.4.tar.gz   its build scripts (the macOS/Windows library)
     num2words-0.5.14.tar.gz        the PyPI sdist
+    certifi-<version>.tar.gz       the PyPI sdist
+    tqdm-<version>.tar.gz          the PyPI sdist
     paradee-addon-<version>.tar.gz the add-on: code, spec, tools, workflow (git HEAD)
     README.md
 
@@ -45,6 +48,9 @@ ESPEAK_NG_VERSION = '1.52.0'
 ESPEAKNG_LOADER_COMMIT = '146599e29be31bf17d99f0bcb7dbb2f92aef3d95'
 ESPEAKNG_LOADER_VERSION = '0.2.4'
 NUM2WORDS_VERSION = '0.5.14'
+# MPL-2.0: their versions must match constraints.txt (tests/test_manifest.py).
+CERTIFI_VERSION = '2026.10.23'
+TQDM_VERSION = '4.70.1'
 
 
 def _run(args: list[str], cwd: Path | None = None) -> str:
@@ -94,12 +100,14 @@ def main(argv: list[str] | None = None) -> int:
         _git_archive('https://github.com/thewh1teagle/espeakng-loader', ESPEAKNG_LOADER_COMMIT, staging,
                      f'espeakng-loader-{ESPEAKNG_LOADER_VERSION}')
         _sdist('num2words', NUM2WORDS_VERSION, staging)
+        _sdist('certifi', CERTIFI_VERSION, staging)
+        _sdist('tqdm', TQDM_VERSION, staging)
         addon = f'paradee-addon-{__version__}'
         head = _run(['git', 'rev-parse', 'HEAD'], cwd=REPO_ROOT)
         _run(['git', 'archive', '--format=tar.gz', f'--prefix={addon}/', '-o', str(staging / f'{addon}.tar.gz'),
               'HEAD'], cwd=REPO_ROOT)
 
-        (staging / 'README.md').write_text(f"""# Corresponding Source: Subtitld Inflect add-on {__version__}
+        (staging / 'README.md').write_text(f"""# Corresponding Source: Subtitld Paradee add-on {__version__}
 
 The complete corresponding source of the `paradee-{__version__}-*.zip` archives
 on the same GitHub release, under GPL-3.0 section 6(d).
@@ -110,6 +118,8 @@ on the same GitHub release, under GPL-3.0 section 6(d).
 | `espeak-ng-{ESPEAK_NG_VERSION}.tar.gz` | espeak-ng | {ESPEAK_NG_COMMIT} | GPL-3.0-or-later |
 | `espeakng-loader-{ESPEAKNG_LOADER_VERSION}.tar.gz` | the scripts that build the macOS and Windows espeak-ng | {ESPEAKNG_LOADER_COMMIT} | MIT |
 | `num2words-{NUM2WORDS_VERSION}.tar.gz` | number spelling, frozen as bytecode | PyPI sdist | LGPL-2.1 |
+| `certifi-{CERTIFI_VERSION}.tar.gz` | CA certificates, imported by spaCy (through requests) | PyPI sdist | MPL-2.0 |
+| `tqdm-{TQDM_VERSION}.tar.gz` | progress bars, imported by spaCy | PyPI sdist | MPL-2.0 AND MIT |
 
 ## Rebuilding
 
@@ -124,8 +134,8 @@ espeakng-loader {ESPEAKNG_LOADER_VERSION} wheel, whose library espeakng-loader's
 `build.sh` compiles from the same espeak-ng commit, stages it with
 `tools/stage_espeak.py --loader`, then runs PyInstaller the same way.
 
-The Inflect v2 models (Apache-2.0) are not in the archives; they download on
-first use from Hugging Face at the revisions in `paradee_addon/pins.json`.
+The Paradee model (Apache-2.0) is not in the archives; it downloads on first
+use from Hugging Face at the revision in `paradee_addon/pins.json`.
 """, encoding='utf-8')
 
         args.out.parent.mkdir(parents=True, exist_ok=True)

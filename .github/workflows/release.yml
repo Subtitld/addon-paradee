@@ -7,7 +7,7 @@ name: Release
 #
 # A handshake proves little: numpy, ONNX Runtime and espeak-ng are only loaded
 # at the first line. So every platform's FROZEN add-on is unpacked from its
-# release zip the way Subtitld installs it, downloads both models (54 MB) and
+# release zip the way Subtitld installs it, downloads the model (8.5 MB) and
 # speaks and cancels through the protocol with nothing but what is inside its
 # own bundle, before anything is published.
 #
@@ -46,7 +46,7 @@ jobs:
           python -m pip install --upgrade pip
           pip install -c constraints.txt -e '.[dev]'
 
-      - name: Test suite (includes real synthesis, with both models downloaded)
+      - name: Test suite (includes real synthesis, with the model downloaded)
         run: pytest -q -rs --ignore=tests/test_installed.py --junitxml=report.xml
 
       - name: Refuse skipped tests
@@ -116,9 +116,9 @@ jobs:
           set -euo pipefail
           tools/build_linux.sh
           version=$(python -c "import json; print(json.load(open('manifest.json'))['version'])")
-          echo "ARCHIVE_NAME=inflect-${version}-linux-x86_64.zip" >> "$GITHUB_ENV"
+          echo "ARCHIVE_NAME=paradee-${version}-linux-x86_64.zip" >> "$GITHUB_ENV"
           echo "SOURCE_FILES<<EOF" >> "$GITHUB_ENV"
-          for f in "inflect-${version}-libquadmath-source.tar.gz" "inflect-${version}-source.tar.gz"; do
+          for f in "paradee-${version}-libquadmath-source.tar.gz" "paradee-${version}-source.tar.gz"; do
             echo "$f" >> "$GITHUB_ENV"; echo "$f.sha256" >> "$GITHUB_ENV"
           done
           echo "EOF" >> "$GITHUB_ENV"
@@ -176,7 +176,7 @@ jobs:
           print('executable:', manifest['executable'])
           PY
           test -f "release-staging/bin/paradee-addon${{ matrix.exe_suffix }}"
-          archive="inflect-${version}-${{ matrix.platform_label }}.zip"
+          archive="paradee-${version}-${{ matrix.platform_label }}.zip"
           python tools/make_archive.py release-staging "$archive"
           python -c "import hashlib,sys;p=sys.argv[1];print(hashlib.sha256(open(p,'rb').read()).hexdigest())" "$archive" > "${archive}.sha256"
           echo "ARCHIVE_NAME=$archive" >> "$GITHUB_ENV"
@@ -308,38 +308,39 @@ jobs:
             exit 1
           fi
           mkdir -p release-files
-          find artefacts -type f -name 'inflect-*' -print -exec cp {} release-files/ \;
+          find artefacts -type f -name 'paradee-*' -print -exec cp {} release-files/ \;
           ls -lah release-files
           # Every advertised platform must be present, each with its sidecar,
           # or the catalog refuses the release.
           for label in linux-x86_64 macos-arm64 windows-x86_64; do
-            test -f "release-files/inflect-${version}-${label}.zip"
-            test -f "release-files/inflect-${version}-${label}.zip.sha256"
+            test -f "release-files/paradee-${version}-${label}.zip"
+            test -f "release-files/paradee-${version}-${label}.zip.sha256"
           done
           # GPL-3.0 section 6(d) and LGPL-2.1 section 4: the sources go next to the archives.
-          test -f "release-files/inflect-${version}-source.tar.gz"
-          test -f "release-files/inflect-${version}-libquadmath-source.tar.gz"
+          test -f "release-files/paradee-${version}-source.tar.gz"
+          test -f "release-files/paradee-${version}-libquadmath-source.tar.gz"
       - uses: softprops/action-gh-release@v2
         with:
           files: release-files/*
           fail_on_unmatched_files: true
           generate_release_notes: true
           body: |
-            Offline English text-to-speech for Subtitld with Inflect v2: a natural American
-            English voice at 24 kHz from a model of under 10M parameters, many times faster
-            than real time on the CPU. Two voices: Inflect Micro (best quality, 38 MB) and
-            Inflect Nano (16 MB, faster).
+            Offline English text-to-speech for Subtitld with Paradee 1.2: natural English
+            speech at 24 kHz from an 8M-parameter model distilled from Kokoro-82M, many times
+            faster than real time on the CPU. Four voices from one 8.5 MB model: Heart and
+            Puck (American English), Isabella and Fable (British English).
 
-            The archive holds the add-on, ONNX Runtime and espeak-ng with its English data.
-            Each model downloads the first time its voice speaks, at a pinned revision,
-            checked by sha256.
+            The archive holds the add-on, ONNX Runtime, misaki (Kokoro's phonemizer) with
+            spaCy's small English pipeline, and espeak-ng with its English data. The model
+            downloads the first time a line is spoken, at a pinned revision, checked by sha256.
 
             The add-on is GPL-3.0-or-later, because it bundles espeak-ng (GPL-3.0-or-later);
-            the Inflect v2 models are Apache-2.0. Each archive carries `THIRD_PARTY_LICENSES/`
-            with the licence of everything frozen into it. The complete corresponding source
-            is `inflect-<version>-source.tar.gz` in this release. The Linux archive also
-            carries libquadmath (LGPL-2.1, with numpy); its source is
-            `inflect-<version>-libquadmath-source.tar.gz`.
+            the Paradee model and misaki are Apache-2.0, spaCy and its English pipeline MIT.
+            Each archive carries `THIRD_PARTY_LICENSES/` with the licence of everything
+            frozen into it. The complete corresponding source is
+            `paradee-<version>-source.tar.gz` in this release. The Linux archive also carries
+            libquadmath (LGPL-2.1, with numpy); its source is
+            `paradee-<version>-libquadmath-source.tar.gz`.
 
       # The catalog also rebuilds every six hours; this only makes it immediate.
       - name: Trigger catalog rebuild

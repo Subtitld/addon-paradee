@@ -10,7 +10,7 @@ auditwheel, linked by the GCC Fortran runtime of numpy's OpenBLAS:
 
 It is linked dynamically, so it can be replaced by another build.
 
-Complete corresponding source: inflect-<version>-libquadmath-source.tar.gz,
+Complete corresponding source: paradee-<version>-libquadmath-source.tar.gz,
 attached to the same GitHub release as this archive.
 tools/build_libquadmath_source.py builds it, and checks that every bundled
 libquadmath is this build.

@@ -379,7 +379,7 @@ def build(out: Path, srpm_dir: Path | None, version: str) -> int:
     return 0
 
 
-_README = """# libquadmath source for the Subtitld Inflect add-on {version}
+_README = """# libquadmath source for the Subtitld Paradee add-on {version}
 
 The Linux archive of this add-on release ships libquadmath, licensed under the
 GNU Lesser General Public License 2.1 or later

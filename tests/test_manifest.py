@@ -61,3 +61,13 @@ def test_pins():
 def test_self_test_text_reaches_the_fallback():
     """The bundle's self-test needs espeak-ng: one word of its text is in no misaki dictionary."""
     assert 'Zxqwerty' in addon.SELF_TEST_TEXT
+
+
+def test_the_source_tarball_has_the_frozen_mpl_versions():
+    import importlib.util
+    spec = importlib.util.spec_from_file_location('bst', REPO_ROOT / 'tools' / 'build_source_tarball.py')
+    tool = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(tool)
+    pins = dict(line.split('==') for line in (REPO_ROOT / 'constraints.txt').read_text().splitlines()
+                if '==' in line and not line.startswith('#'))
+    assert (tool.CERTIFI_VERSION, tool.TQDM_VERSION) == (pins['certifi'], pins['tqdm'])

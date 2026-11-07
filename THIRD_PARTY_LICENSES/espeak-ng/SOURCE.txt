@@ -1,9 +1,10 @@
 espeak-ng 1.52.0 — GPL-3.0-or-later (COPYING)
 
-The archive carries espeak-ng's shared library and its American English data
-(phontab, phonindex, phondata, intonations, en_dict, lang/gmw/en-US) in
-bin/_internal/paradee_addon/espeak/. The add-on calls it through ctypes to
-turn text into phonemes, and so is itself GPL-3.0-or-later.
+The archive carries espeak-ng's shared library and its American and British
+English data (phontab, phonindex, phondata, intonations, en_dict,
+lang/gmw/en-US, lang/gmw/en) in bin/_internal/paradee_addon/espeak/. The
+add-on calls it through ctypes to say the words misaki's dictionaries do not
+have, and so is itself GPL-3.0-or-later.
 
 Revision: commit 4870adfa25b1a32b4361592f1be8a40337c58d6c (tag 1.52.0),
 https://github.com/espeak-ng/espeak-ng
@@ -19,7 +20,7 @@ Its source tree also carries COPYING.APACHE, COPYING.BSD2 (getopt.c, used on
 Windows) and COPYING.UCD (the Unicode character database tables); all are
 here.
 
-Complete corresponding source: inflect-<version>-source.tar.gz, attached to
+Complete corresponding source: paradee-<version>-source.tar.gz, attached to
 the same GitHub release as this archive (tools/build_source_tarball.py). It
 holds espeak-ng at that commit, espeakng-loader's build scripts, num2words,
-and the add-on's own source and build files.
+certifi and tqdm, and the add-on's own source and build files.

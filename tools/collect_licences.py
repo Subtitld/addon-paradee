@@ -5,7 +5,8 @@ Copyright (C) 2026 Subtitld contributors
 SPDX-License-Identifier: GPL-3.0-or-later
 
 The frozen bundle carries CPython, the PyInstaller bootloader, espeak-ng and the
-Python distributions it was frozen from (ONNX Runtime, NumPy, num2words):
+Python distributions it was frozen from (ONNX Runtime, NumPy, spaCy and what it
+imports, misaki, num2words):
 those whose modules are in the executable's archive or whose files are in
 _internal/. Each one's licence files, as its wheel ships them, are copied to
 THIRD_PARTY_LICENSES/<distribution>/; ONNX Runtime's include the notices
@@ -95,6 +96,12 @@ COPYLEFT_OK: dict[str, str] = {
     # LGPL-2.1 section 3 allows; its source is in the release's
     # Corresponding Source (tools/build_source_tarball.py).
     'num2words': 'LGPL-2.1, pure Python, source attached to the release',
+    # MPL-2.0 is file-level copyleft and compatible with the GPL. spaCy imports
+    # both on start-up (through requests and its command line), so they ship
+    # unmodified, as bytecode and, for certifi, its CA file; section 3.2 asks
+    # for their source, which is in the release's Corresponding Source.
+    'certifi': 'MPL-2.0, unmodified, source attached to the release',
+    'tqdm': 'MPL-2.0 AND MIT, unmodified, source attached to the release',
 }
 _COPYLEFT = re.compile(r'\b(L?GPL|AGPL|MPL|EPL|CDDL|EUPL)|General Public|Mozilla Public', re.I)
 _COPYLEFT_EXCEPTION = re.compile(r'exception', re.I)
@@ -291,9 +298,10 @@ def main(argv: list[str]) -> int:
 
     lines = ['# Third-party licences', '',
              'What this archive carries besides the add-on itself (GPL-3.0-or-later, LICENSE at the root).',
-             'The Inflect v2 models are not in the archive; each downloads on first use and is Apache-2.0.',
+             'The Paradee model is not in the archive; it downloads on first use and is Apache-2.0.',
              'espeak-ng (GPL-3.0-or-later) is in `bin/_internal/paradee_addon/espeak/`; its complete source,',
-             "with the add-on's and num2words', is the Corresponding Source attached to the same GitHub release.", '',
+             "with the add-on's and those of num2words, certifi and tqdm, is the Corresponding Source",
+             'attached to the same GitHub release.', '',
              '| Component | Version | Licence | Files |', '|---|---|---|---|']
     lines += [f'| {name} | {version} | {declared} | `{folder}/` |' for name, version, declared, folder in rows]
     extra = sorted(p.name for p in committed.iterdir() if p.is_dir()) if committed.is_dir() else []

@@ -13,9 +13,9 @@
 #     tools/build_linux.sh
 #
 # writes, into the repository, owned by you:
-#     inflect-<version>-linux-x86_64.zip                  (+ .sha256)
-#     inflect-<version>-libquadmath-source.tar.gz         (+ .sha256)  LGPL-2.1, numpy's
-#     inflect-<version>-source.tar.gz                     (+ .sha256)  GPL-3.0 Corresponding Source
+#     paradee-<version>-linux-x86_64.zip                  (+ .sha256)
+#     paradee-<version>-libquadmath-source.tar.gz         (+ .sha256)  LGPL-2.1, numpy's
+#     paradee-<version>-source.tar.gz                     (+ .sha256)  GPL-3.0 Corresponding Source
 #
 # The Corresponding Source archives the add-on at git HEAD: commit first.
 # Needs Docker and the network.

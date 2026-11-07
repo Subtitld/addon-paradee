@@ -1,72 +1,70 @@
-# Inflect add-on for Subtitld
+# Paradee add-on for Subtitld
 
 Offline **lightweight English text-to-speech** for
 [Subtitld](https://github.com/Subtitld/subtitld), powered by
-[Inflect v2](https://huggingface.co/owensong/Inflect-Micro-v2) by Owen Song, a
-VITS-style model of under 10M parameters, run on
-[ONNX Runtime](https://onnxruntime.ai).
+[Paradee](https://github.com/sahilmahendrakar/paradee) by Sahil Mahendrakar:
+an 8M-parameter model distilled from [Kokoro-82M](https://huggingface.co/hexgrad/Kokoro-82M),
+run on [ONNX Runtime](https://onnxruntime.ai).
 
 - Serves the `tts.synthesize` task over Subtitld's add-on protocol.
-- **Natural for its size.** One American English voice, at 24 kHz, that
-  scores close to models many times larger on naturalness and intelligibility.
-- **Small and fast, CPU only.** The models are 38 MB (Micro) and 16 MB (Nano).
-  Measured on a 24-thread desktop CPU with the default 8 threads, Micro speaks
-  about 13 times faster than real time and Nano about 30 times; on one thread,
-  about 3 and 8 times.
-  Under 300 MB of memory. No GPU and no torch.
-- **Offline after the first line.** Each model downloads the first time its
-  voice speaks, then nothing leaves the machine: no telemetry, no account.
-- **English only.** Inflect speaks North American English.
+- **Natural for its size.** Four of Kokoro's voices, at 24 kHz, close to
+  Kokoro itself on naturalness and intelligibility with a tenth of its
+  parameters ([arXiv:2610.06817](https://arxiv.org/abs/2610.06817)).
+- **Small and fast, CPU only.** One 8.5 MB model for all four voices. On one
+  thread, a line comes out about 17 to 20 times faster than real time, text
+  analysis included. About 300 MB of memory. No GPU and no torch.
+- **Offline after the first line.** The model downloads the first time a line
+  is spoken, then nothing leaves the machine: no telemetry, no account.
+- **English only,** in American and British accents.
 
 ## Voices
 
-| Voice | Model | Download | Notes |
-|-------|-------|----------|-------|
-| American English man (Inflect Micro, best quality) | Inflect-Micro v2, 9.4M parameters | 38 MB | The default |
-| American English man (Inflect Nano, smaller and faster) | Inflect-Nano v2, 4.0M parameters | 16 MB | Slightly less natural |
+| Voice | Accent | Kokoro voice | Notes |
+|-------|--------|--------------|-------|
+| Heart (American English woman) | American | `af_heart` | The default; closest to Kokoro |
+| Puck (American English man) | American | `am_puck` | |
+| Isabella (British English woman) | British | `bf_isabella` | The furthest from Kokoro of the four |
+| Fable (British English man) | British | `bm_fable` | |
 
-Both are the same fixed synthetic voice; upstream trained it without a real
-speaker's recordings. Inflect does not clone voices.
+The British voices read British pronunciations, the American ones American,
+as Kokoro does. Paradee does not clone voices.
 
 ## Options
 
-Set these in **Settings ▸ Add-ons ▸ Inflect ▸ Configure**.
+Set these in **Settings ▸ Add-ons ▸ Paradee ▸ Configure**.
 
 | Option | Default | Env var | Notes |
 |--------|---------|---------|-------|
-| CPU threads | automatic | `PARADEE_THREADS` | 0 picks half the logical processors, at most 8. |
-| Speaking pace | 1.0 | `PARADEE_SPEED` | Inflect's own pace, 0.5 to 2.0: the model speaks faster or slower rather than the audio being stretched. |
-| Variation | 0.667 | `PARADEE_VARIATION` | The model's noise scale, 0 to 1: 0 is flat and always the same, higher is livelier. |
+| CPU threads | automatic | `PARADEE_THREADS` | 0 uses one thread, which is upstream's choice and already fast. |
+| Speaking pace | 1.0 | `PARADEE_SPEED` | Paradee's own pace, 0.5 to 2.0: the model speaks faster or slower rather than the audio being stretched. |
 
-These are the two style controls of upstream's API (`speed` and `variation`).
-Each line is spoken with the seed Subtitld sends, so the same line in the same
-voice comes out the same every time. Subtitld stretches a dub to fit its
-subtitle itself, so the add-on ignores the rate slider; the speaking pace is
-for changing how Inflect itself talks.
+Subtitld stretches a dub to fit its subtitle itself, so the add-on ignores the
+rate slider; the speaking pace is for changing how Paradee itself talks.
 
 ## How it runs
 
-Upstream publishes an official ONNX export of each model
-([Inflect-Micro-v2-ONNX](https://huggingface.co/owensong/Inflect-Micro-v2-ONNX),
-[Inflect-Nano-v2-ONNX](https://huggingface.co/owensong/Inflect-Nano-v2-ONNX)),
-split into a duration graph and a decoder graph, with a Python text frontend
-that uses the `phonemizer` package and espeak-ng. The add-on ports that
-frontend and wrapper:
+Upstream publishes one int8 ONNX graph that goes from Kokoro's phoneme ids to
+audio, and a small Python wrapper. The add-on ports the wrapper:
 
-- `paradee_addon/text.py`: upstream's English normalizer (numbers, money,
-  dates, times, abbreviations, acronyms), its phoneme overrides and the symbol
-  table, rule for rule.
-- `paradee_addon/espeak.py`: phonemes from libespeak-ng through ctypes, doing
-  what `phonemizer` does in upstream's configuration (punctuation kept in
-  place, stress marks, quoted groups in context) without its dependencies.
-- `paradee_addon/engine.py`: the two graphs, upstream's long-text splitting,
-  pauses and fades.
+- `paradee_addon/g2p.py`: the text becomes phonemes exactly as upstream (and
+  Kokoro) makes them, with [misaki](https://github.com/hexgrad/misaki),
+  Kokoro's own G2P, on [spaCy](https://spacy.io)'s small English pipeline,
+  which tags each word so numbers, money, abbreviations and words such as
+  "read" or "record" come out right. Paradee only learned misaki's phonemes.
+- `paradee_addon/espeak.py`: libespeak-ng through ctypes, for the words in no
+  misaki dictionary (names, mostly), set up as misaki's own fallback sets up
+  the `phonemizer` package, without that package's dependencies.
+- `paradee_addon/engine.py`: the ONNX graph, and upstream's sentence splitting.
 
-`tests/test_espeak.py` checks the phonemes against upstream's own frontend on
-the 412 prompts of upstream's evaluation set and punctuation cases (all
-identical), and `tests/test_engine.py` checks the audio of both models against
-upstream's ONNX wrapper for the same text and seed (within one 16-bit step).
-`tools/make_fixtures.py` makes both fixtures from upstream's code.
+`tests/test_g2p.py` checks the phonemes against upstream's on test sentences
+in both accents, and misaki's fallback word by word (all identical).
+`tests/test_engine.py` checks each voice's audio against upstream's wrapper
+for the same text (within one 16-bit step). `tools/make_fixtures.py` makes
+both fixtures with upstream's own code.
+
+The model mixes random noise into the voice (its breath and hiss). The add-on
+seeds that noise, so the same run of lines sounds the same in every session;
+a line spoken twice in one session differs only in that noise.
 
 ## What is bundled, what is downloaded
 
@@ -74,25 +72,25 @@ upstream's ONNX wrapper for the same text and seed (within one 16-bit step).
 |------|------|---------|--------|
 | Add-on (bundled) | | GPL-3.0-or-later | this repository |
 | espeak-ng 1.52.0, English data only (bundled) | 1.4 MB | GPL-3.0-or-later | [espeak-ng](https://github.com/espeak-ng/espeak-ng) |
-| ONNX Runtime, numpy, num2words (bundled) | see the release | MIT; BSD-3-Clause; LGPL-2.1 | PyPI |
-| Inflect-Micro v2 (downloaded) | 38 MB | Apache-2.0 | [owensong/Inflect-Micro-v2-ONNX](https://huggingface.co/owensong/Inflect-Micro-v2-ONNX) |
-| Inflect-Nano v2 (downloaded) | 16 MB | Apache-2.0 | [owensong/Inflect-Nano-v2-ONNX](https://huggingface.co/owensong/Inflect-Nano-v2-ONNX) |
+| misaki 0.9.4, its English dictionaries (bundled) | 13 MB | Apache-2.0 | [hexgrad/misaki](https://github.com/hexgrad/misaki) |
+| spaCy 3.8 and `en_core_web_sm` 3.8.0 (bundled) | 65 MB | MIT | [explosion/spaCy](https://github.com/explosion/spaCy) |
+| ONNX Runtime, numpy, num2words and what spaCy imports (bundled) | see the release | MIT, BSD, Apache-2.0; num2words LGPL-2.1; certifi and tqdm MPL-2.0 | PyPI |
+| Paradee 1.2, int8 (downloaded) | 8.5 MB | Apache-2.0 | [sahilmahendrakar/Paradee-8M-v1.2](https://huggingface.co/sahilmahendrakar/Paradee-8M-v1.2) |
 
-**Why GPL-3.0-or-later.** The add-on turns text into phonemes with espeak-ng,
-which is GPL-3.0-or-later, and ships it in the same program; so the add-on is
-GPL-3.0-or-later too. The Inflect weights and upstream's frontend code remain
-Apache-2.0 (parts derive from VITS, MIT, and BigVGAN, MIT; see upstream's
-`THIRD_PARTY_NOTICES.md`). The complete corresponding source of each release,
-espeak-ng's included, is `inflect-<version>-source.tar.gz` on the same GitHub
-release.
+**Why GPL-3.0-or-later.** The add-on says unknown words with espeak-ng, which
+is GPL-3.0-or-later, and ships it in the same program; so the add-on is
+GPL-3.0-or-later too. Paradee, its weights and misaki remain Apache-2.0.
+The complete corresponding source of each release, with espeak-ng's,
+num2words', certifi's and tqdm's, is `paradee-<version>-source.tar.gz` on the
+same GitHub release.
 
 On Linux the build compiles espeak-ng itself from the 1.52.0 commit
 (`tools/build_espeak.sh`), because the espeakng-loader wheel's library needs
 glibc 2.29 and the add-on runs on 2.28. macOS and Windows use the wheel's
 library, built from the same commit.
 
-The models go to Subtitld's model folder
-(`$SUBTITLD_MODELS_DIR/inflect/<model>/<revision>`), at the revisions in
+The model goes to Subtitld's model folder
+(`$SUBTITLD_MODELS_DIR/paradee/<model>/<revision>`), at the revision in
 `paradee_addon/pins.json`, each file checked by its sha256. An interrupted
 download resumes. `$HF_ENDPOINT` points it at a mirror. The frozen Linux and
 macOS builds trust the system's CA bundle (`SSL_CERT_FILE` overrides it).
@@ -102,18 +100,15 @@ the notice for every native file in it; the build fails if one has none. The
 Linux archive carries libquadmath (LGPL-2.1), from numpy's wheel; its source
 is attached to the same release.
 
-Upstream asks that generated speech not be presented as a real person's
-recording.
-
 ## Limits
 
 - **English only.** A project in another language is refused with a message
-  that says so. Any English (`en-GB`, `en-AU`...) is accepted and read with
-  the American voice.
-- **Hard words.** Rare names, places, homographs and words from other
-  languages may be mispronounced; that is espeak-ng's dictionary.
-- **Long lines** are cut into sentences, each spoken on its own and joined
-  with a pause, as upstream does. Prosody is not planned across sentences.
+  that says so. Any English (`en-AU`, `en-IN`...) is accepted; each voice
+  reads it in its own accent.
+- **Hard words.** Names, places and words from other languages that misaki
+  does not know are said by espeak-ng, and may be mispronounced.
+- **Long lines** are read one sentence at a time and joined, as upstream does.
+  Prosody is not planned across sentences.
 - **Platforms.** Releases ship Linux x86_64 (glibc 2.28 or newer), macOS
   arm64 and Windows x86_64.
 - **One line at a time.** A cancel stops the line between sentences, or stops
@@ -136,7 +131,7 @@ tools/build_linux.sh
 ```
 
 It compiles espeak-ng, freezes the bundle with `pyinstaller.spec`, gathers
-`THIRD_PARTY_LICENSES/`, and writes `inflect-<version>-linux-x86_64.zip`,
+`THIRD_PARTY_LICENSES/`, and writes `paradee-<version>-linux-x86_64.zip`,
 the libquadmath source and the Corresponding Source tarballs. Then:
 
 ```bash
@@ -151,9 +146,9 @@ pyinstaller pyinstaller.spec --noconfirm
 dist/paradee-addon/paradee-addon --self-test
 ```
 
-To move to other model revisions, run `tools/pin_model.py micro=<sha> nano=<sha>`,
-then regenerate the fixtures with `tools/make_fixtures.py` in a venv with
-upstream's `onnx/requirements.txt`, and check that the tests still pass.
+To move to another model revision, run `tools/pin_model.py <sha>`, then
+regenerate the fixtures with `tools/make_fixtures.py` in a venv with upstream's
+package, and check that the tests still pass.
 
 A tag `vYY.MM.N` builds, tests and publishes every platform
 (`.github/workflows/release.yml`).
