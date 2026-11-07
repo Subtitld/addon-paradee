@@ -1,0 +1,216 @@
+# -*- mode: python ; coding: utf-8 -*-
+"""PyInstaller spec for the Subtitld Paradee add-on.
+
+Copyright (C) 2026 Subtitld contributors
+SPDX-License-Identifier: GPL-3.0-or-later
+
+Produces `dist/paradee-addon/` (launcher + `_internal/`): ONNX Runtime, numpy,
+spaCy with its small English pipeline (en_core_web_sm), misaki with its two
+English dictionaries, num2words, the add-on, and espeak-ng with its English
+data. The Paradee model is not in it; it downloads the first time a line is
+spoken. The release step copies the folder to `bin/` inside the archive, next
+to manifest.json.
+
+espeak-ng must be staged first, into paradee_addon/espeak/:
+
+    tools/build_espeak.sh                 # Linux: compiles it (tools/build_linux.sh does this)
+    python tools/stage_espeak.py --loader # macOS, Windows: from the espeakng-loader wheel
+
+Run from the add-on root:
+
+    pyinstaller pyinstaller.spec --noconfirm
+    dist/paradee-addon/paradee-addon --self-test
+"""
+
+# ruff: noqa: F821  # PyInstaller injects Analysis/PYZ/EXE/COLLECT at runtime.
+
+from __future__ import annotations
+
+import os
+import subprocess
+import sys
+from pathlib import Path
+
+from PyInstaller.utils.hooks import collect_data_files
+
+SPEC_ROOT = Path(SPECPATH).resolve()
+PACKAGE = SPEC_ROOT / 'paradee_addon'
+ESPEAK = PACKAGE / 'espeak'
+ESPEAK_LIBRARY = {'win32': 'espeak-ng.dll', 'darwin': 'libespeak-ng.dylib'}.get(sys.platform, 'libespeak-ng.so.1')
+
+# Fail the build, loudly, if the pins or espeak-ng are missing. Otherwise the
+# frozen add-on would answer the handshake and then fail the first line.
+_MISSING = [str(p) for p in (PACKAGE / 'pins.json', ESPEAK / ESPEAK_LIBRARY, ESPEAK / 'SOURCE.txt',
+                             ESPEAK / 'espeak-ng-data' / 'en_dict', ESPEAK / 'espeak-ng-data' / 'phondata')
+            if not p.is_file()]
+if _MISSING:
+    raise SystemExit(f'FATAL: missing {", ".join(_MISSING)}. Stage espeak-ng first (see the docstring).')
+
+datas = [
+    (str(PACKAGE / 'pins.json'), 'paradee_addon'),
+    (str(ESPEAK / 'espeak-ng-data'), 'paradee_addon/espeak/espeak-ng-data'),
+    (str(ESPEAK / 'SOURCE.txt'), 'paradee_addon/espeak'),
+]
+# spaCy's English pipeline: its config, vocabulary and weights.
+datas += collect_data_files('en_core_web_sm')
+# misaki's American and British dictionaries only: its Japanese and Vietnamese
+# data is for languages the add-on never speaks.
+datas += collect_data_files('misaki', includes=['data/us_*.json', 'data/gb_*.json', 'data/__init__.py'])
+# A binary, so PyInstaller bundles what it links (the C++ runtime).
+binaries = [(str(ESPEAK / ESPEAK_LIBRARY), 'paradee_addon/espeak')]
+
+
+# ---------------------------------------------------------------------------
+# libexpat sanity check (from addon-whispercpp).
+#
+# PyInstaller bundles whatever expat it resolved on the build host, for
+# CPython's pyexpat. If that host has an OLD expat shadowing the distro one
+# (for example a hand-built 2.5.0 in /usr/local/lib), the frozen binary dies
+# before reaching Python:
+#     Failed to load libpython3.x.so: undefined symbol: XML_SetReparseDeferralEnabled
+# So verify the bundled copy exports the symbol libpython needs, and substitute
+# a known-good system copy if it does not.
+# ---------------------------------------------------------------------------
+_EXPAT_SYMBOL = 'XML_SetReparseDeferralEnabled'
+
+
+def _exports_symbol(path: str, symbol: str) -> bool:
+    try:
+        out = subprocess.run(['nm', '-D', '--defined-only', path],
+                             capture_output=True, text=True, timeout=30)
+        return symbol in out.stdout
+    except Exception:
+        return True  # no nm (macOS/Windows): assume fine rather than break the build
+
+
+def _fix_libexpat(entries):
+    if not sys.platform.startswith('linux'):
+        return entries
+    out = []
+    for entry in entries:
+        name = entry[0] if entry else ''
+        src = entry[1] if len(entry) > 1 else ''
+        if not os.path.basename(name).startswith('libexpat.so') or _exports_symbol(src, _EXPAT_SYMBOL):
+            out.append(entry)
+            continue
+        for cand in ('/usr/lib/x86_64-linux-gnu/libexpat.so.1', '/usr/lib64/libexpat.so.1',
+                     '/lib/x86_64-linux-gnu/libexpat.so.1'):
+            if os.path.exists(cand) and _exports_symbol(cand, _EXPAT_SYMBOL):
+                print(f'WARNING: {src} lacks {_EXPAT_SYMBOL}; substituting {cand}')
+                out.append((name, cand) + tuple(entry[2:]))
+                break
+        else:
+            print(f'ERROR: bundled libexpat lacks {_EXPAT_SYMBOL}; the frozen binary will not start.')
+            out.append(entry)
+    return out
+
+
+# ---------------------------------------------------------------------------
+# spaCy's stack ships its debug information: about 60 MB of it in spaCy's,
+# thinc's and blis's compiled modules on Linux (spaCy's shrink about
+# ninefold). Remove it from those modules only, and only the debug sections
+# (strip --strip-debug): PyInstaller's own strip, on every library, corrupts
+# numpy's OpenBLAS with AlmaLinux 8's binutils, and on macOS would break code
+# signatures.
+# ---------------------------------------------------------------------------
+_DEBUG_HEAVY = ('spacy/', 'thinc/', 'blis/', 'srsly/', 'cymem/', 'preshed/', 'murmurhash/')
+
+
+def _strip_debug_info(entries):
+    if not sys.platform.startswith('linux'):
+        return entries
+    out_dir = Path(workpath) / 'stripped'
+    out = []
+    saved = 0
+    for entry in entries:
+        name, src = entry[0], entry[1]
+        if not name.replace(os.sep, '/').startswith(_DEBUG_HEAVY):
+            out.append(entry)
+            continue
+        dest = out_dir / name
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        subprocess.run(['strip', '--strip-debug', '-o', str(dest), src], check=True)
+        saved += os.path.getsize(src) - dest.stat().st_size
+        out.append((name, str(dest)) + tuple(entry[2:]))
+    print(f'stripped debug information from spaCy\'s stack: {saved / 1e6:.0f} MB')
+    return out
+
+
+a = Analysis(
+    [str(PACKAGE / '__main__.py')],
+    pathex=[str(SPEC_ROOT)],
+    binaries=binaries,
+    datas=datas,
+    # Imported inside functions, so the handshake does not wait for numpy.
+    hiddenimports=['paradee_addon.engine', 'paradee_addon.espeak', 'paradee_addon.g2p',
+                   'misaki.en', 'misaki.data', 'en_core_web_sm'],
+    hookspath=[],
+    hooksconfig={},
+    runtime_hooks=[],
+    excludes=[
+        # ONNX Runtime's optional parts: training, the converters and tools,
+        # and what only they import. Inference needs none of it.
+        'onnxruntime.training', 'onnxruntime.tools', 'onnxruntime.transformers',
+        'onnxruntime.quantization', 'onnx', 'sympy', 'coloredlogs', 'humanfriendly',
+        'torch', 'scipy', 'matplotlib', 'pandas', 'IPython',
+        # espeak-ng is staged into paradee_addon/espeak/ instead; phonemizer
+        # is not used at all (paradee_addon/g2p.py and espeak.py do its
+        # work), and docopt is num2words' command line only.
+        'espeakng_loader', 'phonemizer', 'docopt',
+        # misaki's other languages, and what only they import.
+        'misaki.ja', 'misaki.zh', 'misaki.zh_frontend', 'misaki.zh_normalization', 'misaki.ko',
+        'misaki.g2pkc', 'misaki.vi', 'misaki.vi_cleaner', 'misaki.he', 'misaki.cutlet', 'misaki.num2kana',
+        'misaki.tone_sandhi', 'misaki.transcription', 'misaki.espeak',
+        'fugashi', 'unidic', 'unidic_lite', 'jieba', 'pypinyin', 'cn2an', 'jamo', 'mecab', 'sudachipy',
+        'spacy_curated_transformers', 'spacy_transformers', 'cupy', 'tensorflow', 'mxnet', 'jax',
+        'PySide6', 'PyQt6', 'PyQt5', 'tkinter', 'Tkinter', '_tkinter',
+        'pytest', '_pytest', 'pluggy', 'iniconfig', 'setuptools', 'pkg_resources',
+        'unittest', 'pydoc_data',
+        # Standard modules the add-on never calls, reached only through
+        # optional imports. Each would bring a native library, and with it a
+        # licence to ship. ssl and hashlib stay: the models download over
+        # HTTPS and is checked by sha256.
+        # (decimal stays: num2words needs it.)
+        'bz2', '_bz2', 'lzma', '_lzma', 'compression', '_zstd',
+        # GPL (readline) and ncurses: for interactive terminals, which the
+        # add-on never has.
+        'readline', 'curses', '_curses', '_curses_panel',
+    ],
+    noarchive=False,
+)
+
+a.binaries = _fix_libexpat(a.binaries)
+a.binaries = _strip_debug_info(a.binaries)
+a.binaries = [entry for entry in a.binaries if not os.path.basename(entry[0]).startswith('libmvec.so')]
+
+pyz = PYZ(a.pure, a.zipped_data)
+
+exe = EXE(
+    pyz,
+    a.scripts,
+    [],
+    exclude_binaries=True,
+    name='paradee-addon',
+    debug=False,
+    bootloader_ignore_signals=False,
+    # strip=False: see _strip_debug_info, which strips only spaCy's stack.
+    strip=False,
+    upx=False,
+    console=True,  # stdio is the protocol channel
+    disable_windowed_traceback=False,
+    argv_emulation=False,
+    target_arch=None,
+    codesign_identity=None,
+    entitlements_file=None,
+)
+
+coll = COLLECT(
+    exe,
+    a.binaries,
+    a.zipfiles,
+    a.datas,
+    strip=False,
+    upx=False,
+    upx_exclude=[],
+    name='paradee-addon',
+)
