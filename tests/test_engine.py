@@ -59,8 +59,11 @@ def test_matches_upstream_sample_for_sample(paradee, phonemizer, voice):
     wav = fresh.synthesize(PARITY['text'], voice=voice.kokoro, british=voice.british, speed=PARITY['speed'])
     reference = _read(FIXTURES / f'parity-{voice.kokoro}.wav')
     assert len(wav) == len(reference) == PARITY['samples'][voice.kokoro]
-    # The fixture is 16-bit: the add-on's float output rounds to it.
-    assert np.abs(wav - reference).max() < 2 / 32767
+    # The fixture is 16-bit, and ONNX Runtime's int8 kernels round a little
+    # differently from one CPU to another: a few 16-bit steps at most (CI
+    # runners differ by up to 9).
+    assert np.abs(wav - reference).max() < 1e-3
+    assert np.corrcoef(wav, reference)[0, 1] > 0.9999
 
 
 def test_sounds_like_speech(paradee):
