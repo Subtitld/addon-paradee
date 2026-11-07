@@ -1,0 +1,46 @@
+[build-system]
+requires = ["setuptools>=64", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "subtitld-addon-paradee"
+version = "26.11.1"
+description = "Subtitld add-on: offline English text-to-speech with Paradee"
+readme = "README.md"
+license = { text = "GPL-3.0-or-later" }
+authors = [{ name = "Subtitld", email = "jbopen@gmail.com" }]
+requires-python = ">=3.10"
+
+# ONNX Runtime runs upstream's int8 ONNX file; misaki (Kokoro's G2P) with
+# spaCy's small English pipeline makes the phonemes, as upstream does; espeak-ng
+# (called through ctypes, see paradee_addon/espeak.py) says the words misaki
+# does not know. The Linux build compiles espeak-ng itself
+# (tools/build_espeak.sh); elsewhere it comes from the espeakng-loader wheel.
+# en_core_web_sm is not on PyPI: constraints.txt installs it from spaCy's
+# release.
+dependencies = [
+    "onnxruntime==1.31.0",
+    "numpy>=1.26,<3",  # constraints.txt pins the release build
+    "misaki==0.9.4",
+    "spacy>=3.8,<3.9",
+    "en_core_web_sm==3.8.0",
+    "num2words==0.5.14",
+    "espeakng-loader==0.2.4",
+]
+
+[project.optional-dependencies]
+build = ["pyinstaller>=6.10"]
+dev = ["pytest>=7.4"]
+
+[project.scripts]
+paradee-addon = "paradee_addon.__main__:main"
+
+[tool.setuptools]
+packages = ["paradee_addon"]
+
+[tool.setuptools.package-data]
+paradee_addon = ["pins.json"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+markers = ["model: needs the Paradee model (downloads 8.5 MB on first run)"]
