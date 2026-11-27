@@ -1,0 +1,43 @@
+# Pure-Python packages the Haiku zip carries in bin/lib (tools/build_haiku.py),
+# at the versions constraints.txt pins, and spaCy's English pipeline as
+# pyproject.toml pins it. numpy, ONNX Runtime, espeak-ng (espeakng-loader),
+# spaCy and its compiled stack, pydantic-core, regex and MarkupSafe have native
+# code and come from the Haiku packages manifest.json lists instead. docopt is
+# left out: only num2words' command-line script imports it.
+addict==2.4.0
+annotated-doc==0.0.5
+annotated-types==0.8.0
+anyio==4.16.0
+catalogue==2.0.10
+certifi==2026.10.23
+charset-normalizer==3.5.2
+click==8.5.1
+cloudpathlib==0.26.0
+confection==1.3.4
+h11==0.16.0
+httpcore==1.0.9
+httpx==0.28.1
+idna==3.20
+jinja2==3.1.6
+markdown-it-py==4.2.0
+mdurl==0.1.2
+misaki==0.9.4
+num2words==0.5.14
+pydantic==2.14.3
+pygments==2.21.0
+requests==2.34.2
+rich==15.0.0
+shellingham==1.5.4
+smart-open==9.0.2
+spacy-legacy==3.0.12
+spacy-loggers==1.0.5
+tqdm==4.70.1
+typer==0.28.0
+typing-extensions==4.16.0
+typing-inspection==0.4.5
+urllib3==2.8.0
+wasabi==1.1.3
+weasel==1.0.1
+wrapt==2.5.2
+packaging==26.3
+en_core_web_sm @ https://github.com/explosion/spacy-models/releases/download/en_core_web_sm-3.8.0/en_core_web_sm-3.8.0-py3-none-any.whl#sha256=1932429db727d4bff3deed6b34cfc05df17794f4a52eeb26cf8928f7c1a0fb85

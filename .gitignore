@@ -17,3 +17,4 @@ frozen-report.xml
 # espeak-ng staged for the frozen build (tools/stage_espeak.py)
 paradee_addon/espeak/
 .spike/
+release-staging-haiku/
