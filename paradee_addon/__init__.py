@@ -8,6 +8,6 @@ The package exists so the entry point can run both from source
 (`bin/paradee-addon`).
 """
 
-__version__ = '26.11.1'
+__version__ = '26.11.2'
 ADDON_ID = 'paradee'
 PROTOCOL_VERSION = 1

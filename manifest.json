@@ -1,7 +1,7 @@
 {
   "manifest_version": 1,
   "id": "paradee",
-  "version": "26.11.1",
+  "version": "26.11.2",
   "display_name": "Paradee (offline, lightweight English)",
   "summary": "Paradee: natural English speech at 24 kHz from an 8M-parameter model distilled from Kokoro. Four voices, two American and two British, from one 8.5 MB model that downloads the first time a line is spoken. Runs on the CPU, many times faster than real time. English only.",
   "author": "Subtitld",
